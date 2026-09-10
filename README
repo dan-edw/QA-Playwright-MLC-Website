@@ -1,0 +1,28 @@
+# Playwright Website Automation
+
+## Overview
+Automated UI testing framework using Playwright and TypeScript.
+
+## Framework Features
+- Page Object Model
+- Cross-browser testing
+- HTML reporting
+- GitHub Actions integration
+
+## Running Tests Locally
+
+Install dependencies:
+
+npm install
+
+Install browsers:
+
+npx playwright install
+
+Run tests:
+
+npx playwright test
+
+Run headed:
+
+npx playwright test --headed

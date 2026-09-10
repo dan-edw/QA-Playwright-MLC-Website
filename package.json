@@ -1,0 +1,17 @@
+{
+  "name": "websiteautomation",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [],
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
+    "fast-xml-parser": "^5.10.1"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}

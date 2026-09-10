@@ -1,0 +1,18 @@
+<testsuites id="" name="" tests="4" failures="0" skipped="0" errors="0" time="26.236822">
+<testsuite name="contactusonlineENQ.spec.ts" timestamp="2026-09-03T00:19:13.685Z" hostname="chromium" tests="1" failures="0" skipped="0" time="9.792" errors="0">
+<testcase name="[CUTECH-2833] Verify Contact Us Enquiry Form Navigation" classname="contactusonlineENQ.spec.ts" time="9.792">
+</testcase>
+</testsuite>
+<testsuite name="contactusonlineENQ.spec.ts" timestamp="2026-09-03T00:19:13.685Z" hostname="firefox" tests="1" failures="0" skipped="0" time="12.906" errors="0">
+<testcase name="[CUTECH-2833] Verify Contact Us Enquiry Form Navigation" classname="contactusonlineENQ.spec.ts" time="12.906">
+</testcase>
+</testsuite>
+<testsuite name="contactusonlineENQ.spec.ts" timestamp="2026-09-03T00:19:13.685Z" hostname="webkit" tests="1" failures="0" skipped="0" time="17.636" errors="0">
+<testcase name="[CUTECH-2833] Verify Contact Us Enquiry Form Navigation" classname="contactusonlineENQ.spec.ts" time="17.636">
+</testcase>
+</testsuite>
+<testsuite name="contactusonlineENQ.spec.ts" timestamp="2026-09-03T00:19:13.685Z" hostname="Microsoft Edge" tests="1" failures="0" skipped="0" time="14.775" errors="0">
+<testcase name="[CUTECH-2833] Verify Contact Us Enquiry Form Navigation" classname="contactusonlineENQ.spec.ts" time="14.775">
+</testcase>
+</testsuite>
+</testsuites>
