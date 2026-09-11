@@ -37,14 +37,38 @@ jobs:
       run: npm ci
       
     - name: Install Playwright Browsers
-      run: npx playwright install --with-deps
+      run: |
+        npx playwright install --with-deps
+        npx playwright install msedge
+
     
     # ----------------------------------------
     # Step 2: Run Playwright Tests
     # ----------------------------------------
       
     - name: Run Playwright tests
-      run: npx playwright test
+      id: playwright
+      shell: bash
+      run: |
+        set +e
+
+        npx playwright test
+        PLAYWRIGHT_EXIT_CODE=$?
+
+        echo "Playwright exit code: $PLAYWRIGHT_EXIT_CODE"
+        echo "exit_code=$PLAYWRIGHT_EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+        if [ ! -d "test-results" ]; then
+          echo "ERROR: Playwright did not generate test-results"
+          exit 1
+        fi
+
+        echo ""
+        echo "Playwright execution completed."
+        echo "Test failures will be reported in Xray."
+
+        exit 0
+
 
     # ----------------------------------------
     # Step 3: Prepare JUnit XML for Xray
@@ -52,24 +76,24 @@ jobs:
 
     - name: Prepare JUnit XML for Xray
       if: always()
-      run: node scripts/xray-junit-convert.js
-    
-    # ----------------------------------------
-    # Debug: Generated JUnit XML
-    # ----------------------------------------  
-
-    - name: Debug generated JUnit XML
+      shell: bash
       run: |
-        echo "=== Current directory ==="
-        pwd
+        node scripts/xray-junit-convert.js
 
-        echo ""
-        echo "=== XML files ==="
-        find . -name "*.xml"
+        if [ ! -f "test-results.xml" ]; then
+          echo "ERROR: Xray JUnit conversion did not generate test-results.xml"
+          exit 1
+        fi
 
-        echo ""
-        echo "=== test-results.xml ==="
-        head -40 test-results.xml
+        TESTCASE_COUNT=$(grep -o '<testcase ' test-results.xml | wc -l | tr -d ' ' || true)
+
+        echo "Xray testcases generated: $TESTCASE_COUNT"
+
+        if [ "$TESTCASE_COUNT" -eq 0 ]; then
+          echo "ERROR: No Xray testcases found in test-results.xml"
+          exit 1
+        fi
+
 
     # ----------------------------------------
     # Step 4: Authenticate with Xray Cloud
@@ -78,32 +102,48 @@ jobs:
       if: always()
       id: xray-auth
       shell: bash
+      env:
+        XRAY_CLIENT_ID: ${{ secrets.XRAY_CLIENT_ID }}
+        XRAY_CLIENT_SECRET: ${{ secrets.XRAY_CLIENT_SECRET }}
       run: |
-        TOKEN=$(curl -s \
+        if [ -z "$XRAY_CLIENT_ID" ]; then
+          echo "ERROR: XRAY_CLIENT_ID is empty"
+          exit 1
+        fi
+
+        if [ -z "$XRAY_CLIENT_SECRET" ]; then
+          echo "ERROR: XRAY_CLIENT_SECRET is empty"
+          exit 1
+        fi
+
+        HTTP_CODE=$(curl -s \
+          -o xray-auth-response.json \
+          -w "%{http_code}" \
           -H "Content-Type: application/json" \
           -X POST \
-          https://xray.cloud.getxray.app/api/v2/authenticate \
-          -d '{
-            "client_id":"${{ secrets.XRAY_CLIENT_ID }}",
-            "client_secret":"${{ secrets.XRAY_CLIENT_SECRET }}"
-          }')
+          "https://xray.cloud.getxray.app/api/v2/authenticate" \
+          -d "{
+          \"client_id\":\"${XRAY_CLIENT_ID}\",
+          \"client_secret\":\"${XRAY_CLIENT_SECRET}\"
+        }")
 
-        TOKEN=$(echo "$TOKEN" | tr -d '"')
+        if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+          echo "ERROR: Xray authentication failed with HTTP $HTTP_CODE"
+          exit 1
+        fi
 
+        TOKEN=$(tr -d '"' < xray-auth-response.json)
+
+        if [ -z "$TOKEN" ]; then
+          echo "ERROR: Xray returned an empty token"
+          exit 1
+        fi
+
+        echo "::add-mask::$TOKEN"
         echo "XRAY_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
-        echo "Authentication successful"
+        echo "Xray authentication successful."
 
-    # ----------------------------------------
-    # Debug: Verify Files
-    # ----------------------------------------
-    - name: Verify files
-      run: |
-       ls -la
-       echo "-----"
-       ls -la playwright-report || true
-       echo "-----"
-       ls -la test-results || true
 
     # ----------------------------------------
     # Step 5: Publish the Results to Xray
@@ -111,19 +151,63 @@ jobs:
 
     - name: Publish Results to Xray
       if: always()
+      id: publish-xray
       shell: bash
+      env:
+        XRAY_TOKEN: ${{ env.XRAY_TOKEN }}
+        XRAY_PROJECT_KEY: ${{ secrets.XRAY_PROJECT_KEY }}
       run: |
+        if [ -z "$XRAY_TOKEN" ]; then
+          echo "ERROR: XRAY_TOKEN is empty"
+          exit 1
+        fi
 
-       RESPONSE=$(curl -s \
-        --fail-with-body \
-        -H "Authorization: Bearer $XRAY_TOKEN" \
-        -H "Content-Type: text/xml" \
-        --data @"test-results.xml" \
-        "https://xray.cloud.getxray.app/api/v2/import/execution/junit?projectKey=${{ secrets.XRAY_PROJECT_KEY }}"
-       )
+        if [ ! -f "test-results.xml" ]; then
+          echo "ERROR: test-results.xml does not exist"
+          exit 1
+        fi
 
-       echo "===== XRAY RESPONSE ====="
-       echo "$RESPONSE"
+        TESTCASE_COUNT=$(grep -o '<testcase ' test-results.xml | wc -l | tr -d ' ' || true)
+
+        echo "Xray testcases being imported: $TESTCASE_COUNT"
+
+        if [ "$TESTCASE_COUNT" -eq 0 ]; then
+          echo "ERROR: No Xray testcases found in test-results.xml"
+          exit 1
+        fi
+
+        XRAY_IMPORT_URL="https://xray.cloud.getxray.app/api/v2/import/execution/junit?projectKey=${XRAY_PROJECT_KEY}"
+
+        HTTP_CODE=$(curl -s \
+          -o xray-import-response.json \
+          -w "%{http_code}" \
+          -H "Authorization: Bearer ${XRAY_TOKEN}" \
+          -H "Content-Type: text/xml" \
+          --data-binary "@test-results.xml" \
+          "$XRAY_IMPORT_URL")
+
+        echo "HTTP status: $HTTP_CODE"
+
+        if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+          echo "ERROR: Xray JUnit import failed"
+          cat xray-import-response.json
+          exit 1
+        fi
+
+        XRAY_EXECUTION_KEY=$(jq -r '.key // empty' xray-import-response.json)
+        XRAY_EXECUTION_ID=$(jq -r '.id // empty' xray-import-response.json)
+
+        if [ -z "$XRAY_EXECUTION_KEY" ]; then
+          echo "ERROR: Xray import succeeded but no Test Execution key was returned"
+          cat xray-import-response.json
+          exit 1
+        fi
+
+        echo "XRAY_EXECUTION_KEY=$XRAY_EXECUTION_KEY" >> "$GITHUB_OUTPUT"
+        echo "XRAY_EXECUTION_ID=$XRAY_EXECUTION_ID" >> "$GITHUB_OUTPUT"
+
+        echo "Xray Test Execution: $XRAY_EXECUTION_KEY"
+
 
     # ----------------------------------------
     # Step 6: Generate Playwright Test Summary
