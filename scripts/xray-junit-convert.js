@@ -9,47 +9,28 @@ if (!fs.existsSync(file)) {
 
 let xml = fs.readFileSync(file, 'utf8');
 
-const jiraKeys = [];
+let mappedCount = 0;
 
 xml = xml.replace(
-  /<testcase([^>]*)name="\[([A-Z]+-\d+)\]\s*([^"]*)"([^>]*)>/g,
-  (match, beforeName, key, name, afterName) => {
+  /<testcase([^>]*)name="([^"]*?)\[([A-Z][A-Z0-9]*-\d+)\]\s*([^"]*)"([^>]*)>/g,
+  (match, beforeName, prefix, key, testName, afterName) => {
+    mappedCount++;
 
-    jiraKeys.push(key);
-
-    return `<testcase${beforeName}name="${name}"${afterName}>
+    return `<testcase${beforeName}name="${testName.trim()}"${afterName}>
 <properties>
   <property name="test_key" value="${key}"/>
 </properties>`;
   }
 );
 
-if (jiraKeys.length === 0) {
+if (mappedCount === 0) {
   console.error(
     'ERROR: No Jira/Xray test keys were found in Playwright JUnit'
   );
   process.exit(1);
 }
 
-const duplicates = [
-  ...new Set(
-    jiraKeys.filter(
-      (key, index) => jiraKeys.indexOf(key) !== index
-    )
-  )
-];
-
-if (duplicates.length > 0) {
-  console.error(
-    `ERROR: Duplicate Jira/Xray keys detected: ${duplicates.join(', ')}`
-  );
-  process.exit(1);
-}
-
 fs.writeFileSync(file, xml);
 
-console.log('');
-console.log(`Mapped Xray testcases: ${jiraKeys.length}`);
-console.log(`Xray test keys: ${jiraKeys.sort().join(', ')}`);
-console.log('');
-console.log('JUnit XML updated for Xray');
+console.log(`JUnit XML updated for Xray`);
+console.log(`Mapped Playwright executions: ${mappedCount}`);
