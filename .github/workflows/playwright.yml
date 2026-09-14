@@ -69,12 +69,30 @@ jobs:
 
         exit 0
 
+    
+    # ----------------------------------------
+    # Debug
+    # ---------------------------------------- 
+    
+    - name: Debug Playwright JUnit
+      if: always()
+      shell: bash
+      run: |
+        echo "=== Testcase lines ==="
+        grep -n '<testcase' test-results.xml | head -20 || true
 
+        echo ""
+        echo "=== Jira keys found anywhere in XML ==="
+        grep -o 'CUTECH-[0-9]*' test-results.xml | sort -u || true
+
+    
+    
     # ----------------------------------------
     # Step 3: Prepare JUnit XML for Xray
     # ----------------------------------------
 
     - name: Prepare JUnit XML for Xray
+      id: prepare-xray
       if: always()
       shell: bash
       run: |
@@ -99,7 +117,7 @@ jobs:
     # Step 4: Authenticate with Xray Cloud
     # ----------------------------------------
     - name: Authenticate with Xray Cloud
-      if: always()
+      if: ${{ always() && steps.prepare-xray.outcome == 'success' }}
       id: xray-auth
       shell: bash
       env:
@@ -150,7 +168,7 @@ jobs:
     # ----------------------------------------
 
     - name: Publish Results to Xray
-      if: always()
+      if: ${{ always() && steps.prepare-xray.outcome == 'success' && steps.xray-auth.outcome == 'success' }}
       id: publish-xray
       shell: bash
       env:
