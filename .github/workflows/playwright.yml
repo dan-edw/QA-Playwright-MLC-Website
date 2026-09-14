@@ -86,6 +86,21 @@ jobs:
         grep -o 'CUTECH-[0-9]*' test-results.xml | sort -u || true
 
     
+    # ----------------------------------------
+    # Debug
+    # ----------------------------------------
+    - name: Debug Playwright JSON
+      if: always()
+      shell: bash
+      run: |
+        echo "=== JSON project names ==="
+        grep -o '"projectName":"[^"]*"' playwright-results.json | sort -u || true
+
+        echo ""
+        echo "=== JSON Jira keys ==="
+        grep -o 'CUTECH-[0-9]*' playwright-results.json | sort -u || true
+
+    
     
     # ----------------------------------------
     # Step 3: Prepare JUnit XML for Xray
