@@ -10,11 +10,11 @@ export class ComplaintPage {
     this.page = page;
 
     this.heading = page.getByRole('heading', {
-      name: /complaint/i,
+      name: 'Complaints Resolution'
     });
 
     this.emailLink = page.getByRole('link', {
-      name: /email/i,
+      name: 'complaints@mlc.com.au'
     });
   }
 

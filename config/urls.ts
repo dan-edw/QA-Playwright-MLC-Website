@@ -1,5 +1,3 @@
-// config/urls.ts
-
 function getRequiredUrl(name: string): string {
   const value = process.env[name];
 
@@ -12,9 +10,6 @@ function getRequiredUrl(name: string): string {
   return value.replace(/\/$/, '');
 }
 
-const complaintBaseURL = getRequiredUrl('COMPLAINT_BASE_URL');
-
 export const urls = {
-  complaint: complaintBaseURL,
-  
+  complaint: getRequiredUrl('COMPLAINT_BASE_URL'),
 };
