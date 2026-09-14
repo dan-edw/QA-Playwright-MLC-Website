@@ -12,6 +12,9 @@ function getRequiredUrl(name: string): string {
   return value.replace(/\/$/, '');
 }
 
+const complaintBaseURL = getRequiredUrl('COMPLAINT_BASE_URL');
+
 export const urls = {
-  complaintsResolution: getRequiredUrl('COMPLAINTS_RESOLUTION_URL'),
+  complaint: complaintBaseURL,
+  
 };
