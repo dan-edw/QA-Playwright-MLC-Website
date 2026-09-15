@@ -100,7 +100,45 @@ jobs:
         echo "=== JSON Jira keys ==="
         grep -o 'CUTECH-[0-9]*' playwright-results.json | sort -u || true
 
+
+    # ----------------------------------------
+    # Debug
+    # ----------------------------------------
+    - name: Debug Playwright JSON Structure
+      if: always()
+      shell: bash
+      run: |
+        echo "=== Top-level keys ==="
+        jq 'keys' playwright-results.json
+
+        echo ""
+        echo "=== Config projects ==="
+        jq '.config.projects' playwright-results.json
+
+        echo ""
+        echo "=== First suite ==="
+        jq '.suites[0]' playwright-results.json | head -150
+        
     
+    # ----------------------------------------
+    # Debug
+    # ----------------------------------------
+    
+    - name: Debug First Playwright Test
+      if: always()
+      shell: bash
+      run: |
+        echo "=== First test containing Jira key ==="
+
+        jq '
+          ..
+          | objects
+          | select(
+            (.title? // "")
+            | test("CUTECH-2826")
+          )
+        ' playwright-results.json | head -200
+
     
     # ----------------------------------------
     # Step 3: Prepare JUnit XML for Xray
