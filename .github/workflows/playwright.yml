@@ -270,6 +270,8 @@ jobs:
     - name: Publish Environment Summary
       if: always()
       shell: bash
+      env:
+        XRAY_EXECUTION_KEY: ${{ steps.publish-xray.outputs.XRAY_EXECUTION_KEY }}
       run: |
        {
         echo ""
@@ -278,6 +280,7 @@ jobs:
         echo "| Setting | Value |"
         echo "|---------|-------|"
         echo "| Environment | ${ENVIRONMENT} |"
+        echo "| Xray Execution Key | ${XRAY_EXECUTION_KEY:-Not created} |"
         echo "| Browser Coverage | Chromium, Firefox, WebKit, Microsoft Edge |"
         echo "| Framework | Playwright |"
         echo "| Report Format | JUnit XML, Playwright HTML |"

@@ -326,7 +326,7 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
   tests="${tests.length}"
   failures="${failed}">
   <testsuite
-    name="Playwright Cross-Browser Regression"
+    name="Playwright Regression Test Suite"
     tests="${tests.length}"
     failures="${failed}">
 ${testcaseXml}
