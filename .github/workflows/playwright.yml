@@ -87,7 +87,12 @@ jobs:
           exit 1
         fi
 
-        TESTCASE_COUNT=$(grep -o '<testcase ' xray-results.xml | wc -l | tr -d ' ' || true)
+        TESTCASE_COUNT=$(python3 - <<'PY'
+        import xml.etree.ElementTree as ET
+        root = ET.parse("xray-results.xml").getroot()
+        print(len(root.findall(".//testcase")))
+        PY
+        )
 
         echo "Logical Xray tests generated: $TESTCASE_COUNT"
 
@@ -99,6 +104,7 @@ jobs:
         echo ""
         echo "=== Generated Xray JUnit ==="
         cat xray-results.xml
+
 
 
 
@@ -169,17 +175,23 @@ jobs:
           exit 1
         fi
 
-        if [ ! -f "test-results.xml" ]; then
-          echo "ERROR: test-results.xml does not exist"
+        if [ ! -f "xray-results.xml" ]; then
+          echo "ERROR: xray-results.xml does not exist"
           exit 1
         fi
 
-        TESTCASE_COUNT=$(grep -o '<testcase ' test-results.xml | wc -l | tr -d ' ' || true)
+        TESTCASE_COUNT=$(python3 - <<'PY'
+        import xml.etree.ElementTree as ET
+        root = ET.parse("xray-results.xml").getroot()
+        print(len(root.findall(".//testcase")))
+        PY
+        )
+
 
         echo "Xray testcases being imported: $TESTCASE_COUNT"
 
         if [ "$TESTCASE_COUNT" -eq 0 ]; then
-          echo "ERROR: No Xray testcases found in test-results.xml"
+          echo "ERROR: No Xray testcases found in xray-results.xml"
           exit 1
         fi
 
