@@ -1,135 +1,19 @@
 const fs = require('fs');
 
-const junitFile = 'test-results.xml';
-const jsonFile = 'playwright-results.json';
+const INPUT = 'playwright-results.json';
+const OUTPUT = 'xray-results.xml';
 
-if (!fs.existsSync(junitFile)) {
-  console.error(`ERROR: ${junitFile} does not exist`);
+if (!fs.existsSync(INPUT)) {
+  console.error(`ERROR: ${INPUT} does not exist`);
   process.exit(1);
 }
 
-if (!fs.existsSync(jsonFile)) {
-  console.error(`ERROR: ${jsonFile} does not exist`);
-  process.exit(1);
-}
+const report = JSON.parse(fs.readFileSync(INPUT, 'utf8'));
 
-let xml = fs.readFileSync(junitFile, 'utf8');
-const report = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
+const jiraPattern = /\[([A-Z][A-Z0-9]+-\d+)\]\s*(.*)/;
+const logicalTests = [];
 
-const environment = (process.env.ENVIRONMENT || 'UNKNOWN').toUpperCase();
-
-const executions = [];
-
-/*
-* Recursively walk the Playwright JSON suites.
-*
-* Each Playwright spec contains:
-*   title
-*   file
-*   tests[]
-*
-* Each test contains:
-*   projectName
-*   results[]
-*/
-function walkSuites(suites = []) {
-  for (const suite of suites) {
-
-    for (const spec of suite.specs || []) {
-      const jiraMatch = spec.title.match(
-        /\[([A-Z][A-Z0-9]*-\d+)\]/
-      );
-
-      if (!jiraMatch) {
-        continue;
-      }
-
-      const jiraKey = jiraMatch[1];
-
-      const testName = spec.title
-        .replace(/\[[A-Z][A-Z0-9]*-\d+\]\s*/, '')
-        .trim();
-
-      for (const test of spec.tests || []) {
-
-        const results = test.results || [];
-
-        /*
-         * Use the final result because CI retries are enabled.
-         */
-        const finalResult =
-          results.length > 0
-            ? results[results.length - 1]
-            : null;
-
-        executions.push({
-          jiraKey,
-          testName,
-          projectName: test.projectName || 'Unknown',
-          status: finalResult?.status || 'unknown',
-          file: spec.file || suite.file || 'unknown'
-        });
-      }
-    }
-
-    walkSuites(suite.suites || []);
-  }
-}
-
-walkSuites(report.suites || []);
-
-if (executions.length === 0) {
-  console.error(
-    'ERROR: No Jira/Xray test executions were found in Playwright JSON'
-  );
-  process.exit(1);
-}
-
-console.log(
-  `Playwright JSON executions found: ${executions.length}`
-);
-
-/*
-* Make browser names nicer for Xray.
-*/
-function formatBrowserName(projectName) {
-  switch (projectName.toLowerCase()) {
-    case 'chromium':
-      return 'Chromium';
-
-    case 'firefox':
-      return 'Firefox';
-
-    case 'webkit':
-      return 'WebKit';
-
-    case 'microsoft edge':
-      return 'Microsoft Edge';
-
-    default:
-      return projectName;
-  }
-}
-
-function normaliseStatus(status) {
-  switch ((status || '').toLowerCase()) {
-    case 'passed':
-      return 'PASS';
-
-    case 'failed':
-    case 'timedout':
-    case 'interrupted':
-      return 'FAIL';
-
-    case 'skipped':
-      return 'SKIPPED';
-
-    default:
-      return status.toUpperCase();
-  }
-}
-
-function escapeXml(value) {
+function escapeXml(value = '') {
   return String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -138,98 +22,173 @@ function escapeXml(value) {
     .replace(/'/g, '&apos;');
 }
 
-/*
-* Track which JSON execution has already been used.
-*
-* The JUnit ordering currently corresponds with the JSON execution
-* ordering for each Jira key, so each matching execution is consumed
-* exactly once.
-*/
-const remainingExecutions = [...executions];
+function walkSuite(suite) {
+  for (const spec of suite.specs || []) {
+    const match = spec.title.match(jiraPattern);
 
-let mappedCount = 0;
-
-xml = xml.replace(
-  /<testcase([^>]*)name="([^"]*?)\[([A-Z][A-Z0-9]*-\d+)\]\s*([^"]*)"([^>]*)>/g,
-  (match, beforeName, prefix, key, junitTestName, afterName) => {
-
-    const executionIndex = remainingExecutions.findIndex(
-      execution => execution.jiraKey === key
-    );
-
-    if (executionIndex === -1) {
-      console.error(
-        `ERROR: Could not find Playwright JSON execution for ${key}`
-      );
-      process.exit(1);
+    if (!match) {
+      continue;
     }
 
-    const execution = remainingExecutions[executionIndex];
+    const jiraKey = match[1];
+    const testName = match[2].trim();
 
-    remainingExecutions.splice(executionIndex, 1);
+    const browserResults = (spec.tests || []).map(test => {
+      const attempts = test.results || [];
+      const finalAttempt = attempts[attempts.length - 1];
 
-    const browser = formatBrowserName(
-      execution.projectName
-    );
+      return {
+        browser: test.projectName || test.projectId || 'unknown',
+        status: finalAttempt?.status || 'unknown',
+        duration: finalAttempt?.duration || 0,
+        retry: finalAttempt?.retry || 0,
+        errors: finalAttempt?.errors || []
+      };
+    });
 
-    const status = normaliseStatus(
-      execution.status
-    );
-
-    const specName = execution.file
-      .replace(/\\/g, '/')
-      .split('/')
-      .pop();
-
-    const comment = [
-      `Browser: ${browser}`,
-      `Environment: ${environment}`,
-      `Spec: ${specName}`,
-      `Test: ${execution.testName}`,
-      `Status: ${status}`
-    ].join('\n');
-
-    mappedCount++;
-
-    console.log(
-      `Mapped ${key} -> ${browser} -> ${status}`
-    );
-
-    return `<testcase${beforeName}name="${escapeXml(
-      execution.testName
-    )}"${afterName}>
-<properties>
-  <property name="test_key" value="${escapeXml(key)}"/>
-  <property name="comment" value="${escapeXml(comment)}"/>
-  <property name="browser" value="${escapeXml(browser)}"/>
-  <property name="environment" value="${escapeXml(environment)}"/>
-</properties>`;
+    logicalTests.push({
+      jiraKey,
+      testName,
+      browserResults
+    });
   }
-);
 
-if (mappedCount === 0) {
+  for (const child of suite.suites || []) {
+    walkSuite(child);
+  }
+}
+
+for (const suite of report.suites || []) {
+  walkSuite(suite);
+}
+
+if (logicalTests.length === 0) {
   console.error(
-    'ERROR: No Jira/Xray test keys were mapped into Playwright JUnit'
+    'ERROR: No Jira/Xray test keys were found in Playwright JSON'
   );
   process.exit(1);
 }
 
-if (remainingExecutions.length !== 0) {
+const duplicateKeys = logicalTests
+  .map(test => test.jiraKey)
+  .filter((key, index, array) => array.indexOf(key) !== index);
+
+if (duplicateKeys.length > 0) {
   console.error(
-    `ERROR: ${remainingExecutions.length} Playwright JSON executions were not mapped`
+    `ERROR: Duplicate logical Jira/Xray tests found: ${[...new Set(duplicateKeys)].join(', ')}`
   );
-
-  for (const execution of remainingExecutions) {
-    console.error(
-      `Unmapped: ${execution.jiraKey} / ${execution.projectName}`
-    );
-  }
-
   process.exit(1);
 }
 
-fs.writeFileSync(junitFile, xml);
+function isPassed(result) {
+  return result.status === 'passed';
+}
+
+function buildBrowserSummary(browserResults) {
+  return browserResults
+    .map(result => {
+      const durationSeconds = (result.duration / 1000).toFixed(2);
+
+      return `${result.browser}: ${result.status.toUpperCase()} (${durationSeconds}s)`;
+    })
+    .join('\n');
+}
+
+function buildFailureDetails(browserResults) {
+  return browserResults
+    .filter(result => !isPassed(result))
+    .map(result => {
+      const errors = result.errors
+        .map(error => error.message || String(error))
+        .join('\n');
+
+      return `${result.browser}:\n${errors || `Status: ${result.status}`}`;
+    })
+    .join('\n\n');
+}
+
+let passed = 0;
+let failed = 0;
+
+const testcaseXml = logicalTests.map(test => {
+  const overallPassed =
+    test.browserResults.length > 0 &&
+    test.browserResults.every(isPassed);
+
+  if (overallPassed) {
+    passed++;
+  } else {
+    failed++;
+  }
+
+  const totalDuration =
+    test.browserResults.reduce(
+      (sum, result) => sum + result.duration,
+      0
+    ) / 1000;
+
+  const browserSummary = buildBrowserSummary(
+    test.browserResults
+  );
+
+  let xml = `
+  <testcase
+    name="${escapeXml(test.testName)}"
+    classname="Playwright"
+    time="${totalDuration.toFixed(3)}">
+    <properties>
+      <property
+        name="test_key"
+        value="${escapeXml(test.jiraKey)}"/>
+    </properties>
+    <system-out>${escapeXml(browserSummary)}</system-out>`;
+
+  if (!overallPassed) {
+    const failureDetails = buildFailureDetails(
+      test.browserResults
+    );
+
+    xml += `
+    <failure message="One or more browser executions failed">${escapeXml(
+      failureDetails
+    )}</failure>`;
+  }
+
+  xml += `
+  </testcase>`;
+
+  return xml;
+}).join('\n');
+
+const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites
+  tests="${logicalTests.length}"
+  failures="${failed}">
+  <testsuite
+    name="Playwright Cross-Browser Regression"
+    tests="${logicalTests.length}"
+    failures="${failed}">
+${testcaseXml}
+  </testsuite>
+</testsuites>
+`;
+
+fs.writeFileSync(OUTPUT, xml);
 
 console.log('');
-console.log('JUnit XML updated for Xray');
-console.log(`Mapped Playwright executions: ${mappedCount}`);
+console.log('Xray JUnit generated successfully.');
+console.log(`Logical Xray tests : ${logicalTests.length}`);
+console.log(`Passed             : ${passed}`);
+console.log(`Failed             : ${failed}`);
+console.log(`Output             : ${OUTPUT}`);
+console.log('');
+
+for (const test of logicalTests) {
+  console.log(`${test.jiraKey} - ${test.testName}`);
+
+  for (const result of test.browserResults) {
+    console.log(
+      `  ${result.browser}: ${result.status.toUpperCase()}`
+    );
+  }
+}

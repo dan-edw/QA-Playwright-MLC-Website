@@ -70,97 +70,7 @@ jobs:
         exit 0
 
     
-    # ----------------------------------------
-    # Debug
-    # ---------------------------------------- 
-    
-    - name: Debug Playwright JUnit
-      if: always()
-      shell: bash
-      run: |
-        echo "=== Testcase lines ==="
-        grep -n '<testcase' test-results.xml | head -20 || true
-
-        echo ""
-        echo "=== Jira keys found anywhere in XML ==="
-        grep -o 'CUTECH-[0-9]*' test-results.xml | sort -u || true
-
-    
-    # ----------------------------------------
-    # Debug
-    # ----------------------------------------
-    - name: Debug Playwright JSON
-      if: always()
-      shell: bash
-      run: |
-        echo "=== JSON project names ==="
-        grep -o '"projectName":"[^"]*"' playwright-results.json | sort -u || true
-
-        echo ""
-        echo "=== JSON Jira keys ==="
-        grep -o 'CUTECH-[0-9]*' playwright-results.json | sort -u || true
-
-
-    # ----------------------------------------
-    # Debug
-    # ----------------------------------------
-    - name: Debug Playwright JSON Structure
-      if: always()
-      shell: bash
-      run: |
-        echo "=== Top-level keys ==="
-        jq 'keys' playwright-results.json
-
-        echo ""
-        echo "=== Project names ==="
-        jq -r '.config.projects[].name' playwright-results.json
-
-        echo ""
-        echo "=== Test structure ==="
-        jq '
-          .suites[]
-          | .suites[]
-          | .specs[]
-          | {
-              title: .title,
-              tests: [
-                .tests[] | {
-                  projectName: .projectName,
-                  status: .status,
-                  results: [.results[] | {
-                    status: .status,
-                    retry: .retry
-                  }]
-                }
-              ]
-            }
-        ' playwright-results.json
-
-        
-    
-    # ----------------------------------------
-    # Debug
-    # ----------------------------------------
-    
-    - name: Debug First Playwright Test
-      if: always()
-      shell: bash
-      run: |
-        echo "=== First test containing Jira key ==="
-
-        jq '
-          [
-           ..
-           | objects
-           | select(
-              (.title? // "")
-              | test("CUTECH-2826")
-             )
-          ][0]
-        ' playwright-results.json
-
-
-    
+     
     # ----------------------------------------
     # Step 3: Prepare JUnit XML for Xray
     # ----------------------------------------
@@ -172,19 +82,24 @@ jobs:
       run: |
         node scripts/xray-junit-convert.js
 
-        if [ ! -f "test-results.xml" ]; then
-          echo "ERROR: Xray JUnit conversion did not generate test-results.xml"
+        if [ ! -f "xray-results.xml" ]; then
+          echo "ERROR: Xray conversion did not generate xray-results.xml"
           exit 1
         fi
 
-        TESTCASE_COUNT=$(grep -o '<testcase ' test-results.xml | wc -l | tr -d ' ' || true)
+        TESTCASE_COUNT=$(grep -o '<testcase ' xray-results.xml | wc -l | tr -d ' ' || true)
 
-        echo "Xray testcases generated: $TESTCASE_COUNT"
+        echo "Logical Xray tests generated: $TESTCASE_COUNT"
 
         if [ "$TESTCASE_COUNT" -eq 0 ]; then
-          echo "ERROR: No Xray testcases found in test-results.xml"
+          echo "ERROR: No Xray testcases found"
           exit 1
         fi
+
+        echo ""
+        echo "=== Generated Xray JUnit ==="
+        cat xray-results.xml
+
 
 
     # ----------------------------------------
@@ -275,7 +190,7 @@ jobs:
           -w "%{http_code}" \
           -H "Authorization: Bearer ${XRAY_TOKEN}" \
           -H "Content-Type: text/xml" \
-          --data-binary "@test-results.xml" \
+          --data-binary "@xray-results.xml" \
           "$XRAY_IMPORT_URL")
 
         echo "HTTP status: $HTTP_CODE"
