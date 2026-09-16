@@ -112,12 +112,30 @@ jobs:
         jq 'keys' playwright-results.json
 
         echo ""
-        echo "=== Config projects ==="
-        jq '.config.projects' playwright-results.json
+        echo "=== Project names ==="
+        jq -r '.config.projects[].name' playwright-results.json
 
         echo ""
-        echo "=== First suite ==="
-        jq '.suites[0]' playwright-results.json | head -150
+        echo "=== Test structure ==="
+        jq '
+          .suites[]
+          | .suites[]
+          | .specs[]
+          | {
+              title: .title,
+              tests: [
+                .tests[] | {
+                  projectName: .projectName,
+                  status: .status,
+                  results: [.results[] | {
+                    status: .status,
+                    retry: .retry
+                  }]
+                }
+              ]
+            }
+        ' playwright-results.json
+
         
     
     # ----------------------------------------
@@ -131,13 +149,16 @@ jobs:
         echo "=== First test containing Jira key ==="
 
         jq '
-          ..
-          | objects
-          | select(
-            (.title? // "")
-            | test("CUTECH-2826")
-          )
-        ' playwright-results.json | head -200
+          [
+           ..
+           | objects
+           | select(
+              (.title? // "")
+              | test("CUTECH-2826")
+             )
+          ][0]
+        ' playwright-results.json
+
 
     
     # ----------------------------------------
