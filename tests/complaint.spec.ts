@@ -11,17 +11,14 @@ test.describe('Complaint Page', () => {
     await expect(complaintPage.heading).toBeVisible();
   });
 
-  test('[CUTECH-2827] Verify Complaint Resolution Page Email Link', async ({ page }) => {
-    const complaintPage = new ComplaintPage(page);
+  test('[CUTECH-2827] Verify Complaint Resolution Page Email Button', async ({ page }) => {
+  const complaintPage = new ComplaintPage(page);
 
-    await complaintPage.open();
+  await complaintPage.open();
 
-    await expect(complaintPage.emailLink).toBeVisible();
+  await expect(complaintPage.emailButton).toBeVisible();
+  await expect(complaintPage.emailButton).toBeEnabled();
 
-    await expect(complaintPage.emailLink).toHaveAttribute(
-      'href',
-      'mailto:complaints@mlc.com.au'
-    );
-  });
-
+  await complaintPage.emailButton.click();
+});
 });
